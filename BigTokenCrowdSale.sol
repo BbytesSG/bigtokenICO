@@ -534,13 +534,6 @@ contract RefundVaultWithCommission is Ownable {
     deposited[investor] = deposited[investor].add(msg.value);
   }
 
-//  function close() onlyOwner public {
-//    require(state == State.Active);
-//    state = State.Closed;
-//    Closed();
-//    wallet.transfer(this.balance);
-//  }
-
   function close() onlyOwner public {
     require(state == State.Active);
     state = State.Closed;
@@ -633,26 +626,26 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
     // number of participants
     uint256 public numberOfPurchasers = 0;
 
-    // maximum tokens that can be minted in this crowd sale
+    // maximum tokens that can be minted in this crowd sale - initialised later by the constructor
     uint256 public maxTokenSupply = 0;
 
     // version cache buster
-    string public constant version = "v1.2";
+    string public constant version = "v1.3";
 
-    // pending contract owner
+    // pending contract owner - initialised later by the constructor
     address public pendingOwner;
 
-    // number of participants
+    // Minimum amount to been able to contribute - initialised later by the constructor
     uint256 public minimumAmount = 0;
 
-    // Reserved amount
+    // Reserved amount - initialised later by the constructor
     address public reservedAddr;
     uint256 public reservedAmount;
 
     // white list for KYC
     mapping (address => bool) public whitelist;
 
-    // white listing admin
+    // white listing admin - initialised later by the constructor
     address public whiteListingAdmin;
 
 
@@ -679,8 +672,9 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
         require(_minimumAmount >= 0);
         require(_maxTokenSupply > 0);
         require(_reservedAmount > 0 && _reservedAmount < _maxTokenSupply);
-        // make sure that the refund goal is within the max supply using the minimum rate, and without the reserved supply
-//        require(_goal.mul(rate) <= _maxTokenSupply.sub(_reservedAmount));
+
+        // make sure that the refund goal is within the max supply, using the default rate,  without the reserved supply
+        require(_goal.mul(rate) <= _maxTokenSupply.sub(_reservedAmount));
 
         pendingOwner = _pendingOwner;
         minimumAmount = _minimumAmount;
@@ -710,13 +704,11 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
         require(whitelist[beneficiary] == true);
         //
         require(validPurchase());
-        // buying can only begins as soon as the owner ship has been transfered
+
+        // buying can only begins as soon as the ownership has been transfer to the pendingOwner
         require(owner==pendingOwner);
 
         uint256 weiAmount = msg.value;
-
-        // make sure we accept only the minimum contribution
-        // require(weiAmount>minimumAmount);
 
         // Compute the number of tokens per wei
         // bonus structure should be used here, if any
@@ -725,7 +717,7 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
         token.mint(beneficiary, tokens);
         TokenPurchase(msg.sender, beneficiary, weiAmount, tokens);
 
-        // update
+        // update wei raised and number of purchasers
         weiRaised = weiRaised.add(weiAmount);
         numberOfPurchasers = numberOfPurchasers + 1;
 
@@ -743,7 +735,7 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
         // make sure we can not mint more token than expected
         bool lessThanMaxSupply = (token.totalSupply() + msg.value.mul(rate)) <= maxTokenSupply;
 
-        //bool withinCap = weiRaised.add(msg.value) <= cap;
+        // make sure that the purchase follow each rules to be valid
         return super.validPurchase() && minAmount && lessThanMaxSupply;
     }
 
@@ -785,13 +777,13 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
         // no more minting allowed - immutable
         token.finishMinting();
 
-        // transfer the token owner ship from the contract address to the real owner
+        // transfer the token owner ship from the contract address to the owner
         token.transferOwnership(owner);
     }
 
     /**
       *
-      * Admin functions only called by owner:
+      * Admin functions only executed by owner:
       * Can change minimum amount
       *
       */
@@ -802,7 +794,7 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
 
      /**
       *
-      * Admin functions only called by owner:
+      * Admin functions only executed by owner:
       * Can change rate
       *
       * We do not use an oracle here as oracle need to be paid each time, and if the oracle is not responding
@@ -830,7 +822,7 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
 
     /**
       *
-      * Admin functions only called by owner:
+      * Admin functions only executed by pendingOwner
       * Change the owner
       *
       */
@@ -853,8 +845,7 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
 
     }
 
-    // run the pre minting
-    // for now yes, after it will be done during the ownership transfer call
+    // run the pre minting of the reserved token
 
     function runPreMint() onlyOwner private {
 
@@ -865,15 +856,6 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
         numberOfPurchasers = numberOfPurchasers + 1;
     }
 
-    /**
-    *    @dev Throws if called by any account other than the owner.
-    *
-    *    This modifier is used to make sure that the contract owner ship has been changed before any crowd funding event
-    */
-    modifier onlyAfterNewOwnerIsSet() {
-        require(pendingOwner == owner);
-        _;
-    }
 
     // add a way to change the whitelistadmin user
     function setWhiteListingAdmin(address _whiteListingAdmin) onlyOwner public {
@@ -882,7 +864,7 @@ contract BigTokenCrowdSale is Crowdsale, RefundableCrowdsaleWithCommission {
 
 
     /**
-    *    @dev Populate the whitelist
+    *    @dev Populate the whitelist, only executed by whiteListingAdmin
     *
     */
     function updateWhitelistMapping(address[] _address,bool value) public {

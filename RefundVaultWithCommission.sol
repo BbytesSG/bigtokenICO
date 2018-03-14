@@ -114,13 +114,6 @@ contract RefundVaultWithCommission is Ownable {
     deposited[investor] = deposited[investor].add(msg.value);
   }
 
-//  function close() onlyOwner public {
-//    require(state == State.Active);
-//    state = State.Closed;
-//    Closed();
-//    wallet.transfer(this.balance);
-//  }
-
   function close() onlyOwner public {
     require(state == State.Active);
     state = State.Closed;
